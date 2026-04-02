@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+KITTY_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/kitty"
+MAIN_CONF="$KITTY_DIR/kitty.conf"
+OVERRIDE_CONF="$KITTY_DIR/font-override.conf"
+INCLUDE_LINE="include font-override.conf"
+
+mkdir -p "$KITTY_DIR"
+
+if [[ ! -f "$MAIN_CONF" ]]; then
+  echo "ERROR: $MAIN_CONF not found."
+  exit 1
+fi
+
+# Ensure override include exists (append once at end)
+if ! grep -qF "$INCLUDE_LINE" "$MAIN_CONF"; then
+  printf "\n# Font override include (added by kitty-font-preview)\n%s\n" "$INCLUDE_LINE" >> "$MAIN_CONF"
+fi
+
+# Collect unique OpenDyslexic-related font family names
+mapfile -t FONTS < <(fc-list | grep -i opendyslexic | awk -F": " "{print \$2}" | awk -F":style=" "{print \$1}" | sort -u)
+
+if (( ${#FONTS[@]} == 0 )); then
+  echo "No OpenDyslexic fonts found via fc-list."
+  echo "Try: sudo pacman -S --needed ttf-opendyslexic"
+  exit 1
+fi
+
+echo "Found ${#FONTS[@]} OpenDyslexic font families:"
+for i in "${!FONTS[@]}"; do
+  printf "  %2d) %s\n" $((i+1)) "${FONTS[$i]}"
+done
+echo
+
+apply_font() {
+  local family="$1"
+  printf "font_family \"%s\"\n" "$family" > "$OVERRIDE_CONF"
+  kitty @ load-config "$MAIN_CONF" >/dev/null 2>&1 || true
+}
+
+echo "Cycling preview. Controls:"
+echo "  Enter = next font"
+echo "  s     = select current font (persist) and exit"
+echo "  q     = quit"
+echo
+
+idx=0
+apply_font "${FONTS[$idx]}"
+echo "Previewing: ${FONTS[$idx]}"
+
+while true; do
+  read -r -p "> " cmd || true
+  case "${cmd:-}" in
+    q|Q) echo "Quit. Current override: $OVERRIDE_CONF"; exit 0 ;;
+    s|S) echo "Selected: ${FONTS[$idx]}"; echo "Saved: $OVERRIDE_CONF"; exit 0 ;;
+    *) idx=$(( (idx + 1) % ${#FONTS[@]} )); apply_font "${FONTS[$idx]}"; echo "Previewing: ${FONTS[$idx]}" ;;
+  esac
+done

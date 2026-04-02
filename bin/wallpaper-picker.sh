@@ -1,0 +1,200 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT="$HOME/.local/bin/set-wallpapers.sh"
+
+# Split by orientation
+STATIC_H="$HOME/Pictures/wallpapers/horizontal"
+STATIC_V="$HOME/Pictures/wallpapers/vertical"
+VIDEO_H="$HOME/Videos/wallpapers/horizontal"
+VIDEO_V="$HOME/Videos/wallpapers/vertical"
+
+choose() {
+  local prompt="$1"; shift
+  printf "%s\n" "$@" | wofi --dmenu \
+    --prompt "$prompt" \
+    --lines 6 \
+    --width 520 \
+    --height 240
+}
+
+choose_small() {
+  local prompt="$1"; shift
+  printf "%s\n" "$@" | wofi --dmenu \
+    --prompt "$prompt" \
+    --lines 3 \
+    --width 520 \
+    --height 170
+}
+
+# Bigger thumbnails for rofi pickers (static + video)
+rofi_pick() {
+  local prompt=""; shift
+  rofi -dmenu -i -show-icons -p "" \
+    -theme-str "
+      window { width: 72em; }
+      listview { lines: 5; }
+      element { padding: 14px; border-radius: 18px; }
+      element-icon { size: 6.0em; margin: 0px 18px 0px 0px; border-radius: 16px; }
+      element-text { vertical-align: 0.5; font: \"monospace 18\"; }
+    " ""
+}
+
+pick_file() {
+  local kind="$1" dir="$2" type="$3"  # type: static|video
+  [[ -d "$dir" ]] || { wofi --dmenu --prompt "Missing dir: $dir" <<<"OK" >/dev/null; exit 1; }
+
+  local file
+  local thumbdir="${XDG_CACHE_HOME:-$HOME/.cache}/wallpaper-thumbs"
+  mkdir -p "$thumbdir"
+
+  if command -v rofi >/dev/null 2>&1; then
+    if [[ "$type" == "static" ]]; then
+      file="$(
+        find "$dir" -maxdepth 1 -type f \
+          \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.webp" -o -iname "*.gif" \) \
+          -printf "%f\t%p\n" | sort |
+        awk -F'\t' '{ printf "%s\0icon\x1f%s\n", $1, $2 }' |
+        rofi_pick "Pick $kind"
+      )"
+    else
+      # VIDEO: generate/cache thumbs, then feed icon path to rofi
+      file="$(
+        while IFS= read -r -d '' vid; do
+          base="$(basename "$vid")"
+          # safe-ish cache filename
+          key="$(printf "%s" "$vid" | sha256sum | awk '{print $1}')"
+          thumb="$thumbdir/${key}.png"
+
+          if [[ ! -s "$thumb" ]]; then
+            ffmpegthumbnailer -i "$vid" -o "$thumb" -s 768 -q 8 >/dev/null 2>&1 || true
+            [[ -s "$thumb" ]] || rm -f "$thumb"
+          fi
+
+          if [[ -s "$thumb" ]]; then
+            printf "%s\0icon\x1f%s\n" "$base" "$thumb"
+          else
+            printf "%s\n" "$base"
+          fi
+        done < <(
+          find "$dir" -maxdepth 1 -type f \
+            \( -iname "*.mp4" -o -iname "*.webm" -o -iname "*.mkv" \) \
+            -print0 | sort -z
+        ) | rofi_pick "Pick $kind"
+      )"
+    fi
+  else
+    # wofi fallback (no thumbnails)
+    if [[ "$type" == "static" ]]; then
+      file="$(find "$dir" -maxdepth 1 -type f \
+        \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.webp" -o -iname "*.gif" \) \
+        -printf "%f\n" | sort | wofi --dmenu --prompt "Pick $kind")"
+    else
+      file="$(find "$dir" -maxdepth 1 -type f \
+        \( -iname "*.mp4" -o -iname "*.webm" -o -iname "*.mkv" \) \
+        -printf "%f\n" | sort | wofi --dmenu --prompt "Pick $kind")"
+    fi
+  fi
+
+  [[ -n "${file:-}" ]] || return 1
+  printf "%s/%s" "$dir" "$file"
+}
+
+set_var() {
+  local var="$1" val="$2"
+  sed -i -E "s|^[[:space:]]*${var}=.*|${var}=${val}|" "$SCRIPT"
+}
+
+pick_display() {
+  # Prefer rofi for the styled “monitor cards”, but fall back to wofi if rofi fails.
+  if ! command -v rofi >/dev/null 2>&1; then
+    choose "Select display" \
+      "VERTICAL (DP-1)" \
+      "MIDDLE (DP-3)" \
+      "RIGHT (DP-2)"
+    return
+  fi
+
+  local icondir="$HOME/.cache/wallpaper-picker-icons"
+  local v="$icondir/vertical.png"
+  local h1="$icondir/horizontal.png"
+  local h2="$icondir/horizontal2.png"
+
+  if [[ ! -s "$v" || ! -s "$h1" || ! -s "$h2" ]]; then
+    choose "Select display" \
+      "VERTICAL (DP-1)" \
+      "MIDDLE (DP-3)" \
+      "RIGHT (DP-2)"
+    return
+  fi
+
+  local choice=""
+  choice="$(
+    printf "%s\t%s\n%s\t%s\n%s\t%s\n" \
+      "VERTICAL (DP-1)" "$v" \
+      "MIDDLE (DP-3)"   "$h1" \
+      "RIGHT (DP-2)"    "$h2" |
+    awk -F'\t' '{ printf "%s\0icon\x1f%s\n", $1, $2 }' |
+    rofi -replace -dmenu -i -no-custom -p "Select display" -columns 3 -show-icons \
+      -theme-str '
+        window { width: 78em; }
+        mainbox { padding: 14px; }
+        entry { enabled: false; }
+        textbox-prompt-colon { enabled: false; }
+
+        listview { lines: 1; columns: 3; fixed-height: true; spacing: 34px; }
+        element { padding: 26px; border-radius: 18px; }
+        element normal.normal { background-color: rgba(255,255,255,0.05); }
+        element selected.normal { background-color: rgba(120,170,255,0.18); }
+
+        element-icon { size: 6.5em; margin: 0px 18px 0px 0px; }
+        element-text { vertical-align: 0.5; font: "monospace 16"; }
+      '
+  )" || true
+
+  if [[ -z "${choice:-}" ]]; then
+    choose "Select display" \
+      "VERTICAL (DP-1)" \
+      "MIDDLE (DP-3)" \
+      "RIGHT (DP-2)"
+    return
+  fi
+
+  printf "%s" "$choice"
+}
+
+TARGET="$(pick_display || true)"
+[[ -n "${TARGET:-}" ]] || exit 0
+
+case "$TARGET" in
+  "VERTICAL (DP-1)") ROLE="VERTICAL" ;;
+  "MIDDLE (DP-3)")   ROLE="MIDDLE" ;;
+  "RIGHT (DP-2)")    ROLE="LEFT" ;;     # DP-2 is your "LEFT" role in set-wallpapers.sh
+  *) exit 0 ;;
+esac
+
+# Decide orientation-specific dirs based on ROLE:
+# - VERTICAL role => vertical folders
+# - others (LEFT/MIDDLE) => horizontal folders
+if [[ "$ROLE" == "VERTICAL" ]]; then
+  STATIC_DIR="$STATIC_V"
+  VIDEO_DIR="$VIDEO_V"
+else
+  STATIC_DIR="$STATIC_H"
+  VIDEO_DIR="$VIDEO_H"
+fi
+
+MODE="$(choose_small "Mode for $ROLE" "static" "video")"
+[[ -n "${MODE:-}" ]] || exit 0
+
+set_var "MODE_${ROLE}" "\"${MODE}\""
+
+if [[ "$MODE" == "static" ]]; then
+  path="$(pick_file "static wallpaper" "$STATIC_DIR" "static")" || exit 0
+  set_var "STATIC_${ROLE}" "\"${path}\""
+else
+  path="$(pick_file "video wallpaper" "$VIDEO_DIR" "video")" || exit 0
+  set_var "VIDEO_${ROLE}" "\"${path}\""
+fi
+
+"$SCRIPT"

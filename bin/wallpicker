@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+scope="${1:-public}"
+
+case "$scope" in
+public | private) ;;
+*) exit 1 ;;
+esac
+
+monitor="$(hyprctl monitors -j | jq -r '.[] | select(.focused==true).name' | head -n1)"
+
+case "$monitor" in
+DP-1) slot="left" ;;
+DP-3) slot="middle" ;;
+DP-2) slot="right" ;;
+*) exit 1 ;;
+esac
+
+rm -f /tmp/wallpicker-mode
+TARGET_MONITOR="$monitor" quickshell -c wallmode >/dev/null 2>&1
+choice="$(cat /tmp/wallpicker-mode 2>/dev/null || true)"
+rm -f /tmp/wallpicker-mode
+
+case "$choice" in
+static | live) ;;
+*) exit 0 ;;
+esac
+
+wall_dir="$HOME/Wallpapers/$scope/$choice/$slot/"
+cache_dir="$HOME/.cache/hyprquickpaper/${scope}-${choice}-${slot}/"
+
+mkdir -p "$wall_dir" "$cache_dir"
+
+cat >"$HOME/.config/quickshell/hyprquickpaper/config.json" <<EOF
+{
+  "wallpaper_path": "$wall_dir",
+  "cache_path": "$cache_dir/",
+  "number_of_pictures": 7,
+  "border_color": "#A98881",
+  "cache_batch_size": 20
+}
+EOF
+
+pkill -f "quickshell -c hyprquickpaper" 2>/dev/null || true
+TARGET_MONITOR="$monitor" quickshell -c hyprquickpaper >/dev/null 2>&1 &

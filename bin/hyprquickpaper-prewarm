@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -u
+set -o pipefail
+
+root_cache="$HOME/.cache/hyprquickpaper"
+mkdir -p "$root_cache"
+
+lockfile="$root_cache/.prewarm.lock"
+exec 9>"$lockfile"
+flock -n 9 || exit 0
+
+log() {
+  printf '[hyprquickpaper-prewarm] %s\n' "$*"
+}
+
+make_fallback_thumb() {
+  local out="$1"
+  magick -size 960x540 xc:'#16131d' \
+    -gravity center -fill '#A98881' -pointsize 42 \
+    -annotate +0+0 'VIDEO' \
+    "$out"
+}
+
+thumb_one() {
+  local src="$1"
+  local out="$2"
+  local tmp="${out}.tmp.$$"
+
+  mkdir -p "$(dirname "$out")"
+
+  case "${src,,}" in
+    *.jpg|*.jpeg|*.png|*.webp|*.bmp|*.gif)
+      if magick "$src" -thumbnail x540 -strip -quality 90 "$tmp"; then
+        mv -f "$tmp" "$out"
+      else
+        log "Skipping image that failed thumbnailing: $src"
+        rm -f "$tmp"
+      fi
+      ;;
+    *.mp4|*.webm|*.mkv|*.mov|*.avi)
+      if ffmpegthumbnailer -i "$src" -o "$tmp" -s 540 -q 8; then
+        mv -f "$tmp" "$out"
+      else
+        log "Using fallback thumbnail for video: $src"
+        rm -f "$tmp"
+        make_fallback_thumb "$out"
+      fi
+      ;;
+  esac
+
+  return 0
+}
+
+sync_folder() {
+  local wall_dir="$1"
+  local cache_dir="$2"
+
+  mkdir -p "$cache_dir"
+
+  find "$wall_dir" -maxdepth 1 -type f \( \
+    -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o \
+    -iname '*.webp' -o -iname '*.bmp' -o -iname '*.gif' -o \
+    -iname '*.mp4' -o -iname '*.webm' -o -iname '*.mkv' -o \
+    -iname '*.mov' -o -iname '*.avi' \
+  \) -print0 | while IFS= read -r -d '' src; do
+    base="$(basename "$src")"
+    out="$cache_dir/${base}.jpg"
+
+    if [[ -f "$out" && "$out" -nt "$src" ]]; then
+      continue
+    fi
+
+    thumb_one "$src" "$out"
+  done
+}
+
+for scope in public private; do
+  for choice in static live; do
+    for slot in left middle right; do
+      wall_dir="$HOME/Wallpapers/$scope/$choice/$slot"
+      cache_dir="$HOME/.cache/hyprquickpaper/${scope}-${choice}-${slot}"
+      [[ -d "$wall_dir" ]] || continue
+      sync_folder "$wall_dir" "$cache_dir"
+    done
+  done
+done
+
+log "Prewarm complete"
+exit 0

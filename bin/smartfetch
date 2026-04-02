@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+WIDTH="${COLUMNS:-$(tput cols 2>/dev/null || echo 120)}"
+CFG="$HOME/.config/fastfetch/config.jsonc"
+ASSETS_DIR="$HOME/.config/fastfetch/assets"
+
+# Pick a logo file:
+# - If SMARTFETCH_LOGO is set, use it
+# - Else default to Gear5Braille.txt (if present)
+# - Else fall back to random *.txt
+if [[ -n "${SMARTFETCH_LOGO:-}" && -f "$ASSETS_DIR/$SMARTFETCH_LOGO" ]]; then
+  LOGO_PATH="$ASSETS_DIR/$SMARTFETCH_LOGO"
+elif [[ -f "$ASSETS_DIR/Gear5Braille.txt" ]]; then
+  LOGO_PATH="$ASSETS_DIR/Gear5Braille.txt"
+else
+  mapfile -t _logos < <(find "$ASSETS_DIR" -maxdepth 1 -type f -name '*.txt' 2>/dev/null | sort)
+  LOGO_PATH="${_logos[RANDOM % ${#_logos[@]}]:-}"
+fi
+
+SONG=""
+if command -v playerctl >/dev/null 2>&1; then
+  best_p=""
+  best_md=""
+
+  # Prefer any player that is actually Playing and has real metadata
+  while IFS= read -r p; do
+    [[ -z "$p" ]] && continue
+
+    st="$(playerctl -p "$p" status 2>/dev/null || true)"
+    [[ "$st" == "Playing" ]] || continue
+
+    md="$(playerctl -p "$p" metadata --format '{{artist}} - {{title}}' 2>/dev/null || true)"
+    [[ -z "$md" || "$md" == " - " ]] && continue
+
+    best_p="$p"
+    best_md="$md"
+
+    # Phone priority: if it's kdeconnect and Playing, take it immediately
+    if [[ "$p" == kdeconnect* ]]; then
+      break
+    fi
+  done < <(playerctl -l 2>/dev/null || true)
+
+  if [[ -n "$best_md" ]]; then
+    if [[ "$best_p" == kdeconnect* ]]; then
+      SONG="♪󰝚♪ (Phone) $best_md"
+    else
+      SONG="♪󰝚♪ $best_md"
+    fi
+  fi
+fi
+
+args=(--config "$CFG")
+
+if [[ -n "${LOGO_PATH:-}" ]]; then
+  if ((WIDTH < 150)); then
+    args+=(--logo-type file --logo "$LOGO_PATH" --logo-position top)
+  else
+    args+=(--logo-type file --logo "$LOGO_PATH" --logo-position left
+      --logo-width 24 --logo-padding-left 12 --logo-padding-right 0)
+  fi
+fi
+
+/usr/bin/fastfetch "${args[@]}"
+
+if [[ -n "${SONG:-}" ]]; then
+  echo -e "\n   \e[35m$SONG\e[0m\n"
+fi

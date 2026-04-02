@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root_src="$(findmnt -n -o SOURCE /)"
+disk="$(lsblk -no PKNAME "$root_src" 2>/dev/null || true)"
+[[ -n "$disk" ]] && disk="/dev/$disk" || disk="/dev/nvme0n1"
+
+# Unique sockets so kitty instances never merge
+tests_sock="/tmp/kbdiag-tests-${UID}-${RANDOM}.sock"
+mon_sock="/tmp/kbdiag-mon-${UID}-${RANDOM}.sock"
+gtop_sock="/tmp/kbdiag-gtop-${UID}-${RANDOM}.sock"
+btop_sock="/tmp/kbdiag-btop-${UID}-${RANDOM}.sock"
+
+wait_sock () {
+  local sock="$1"
+  for _ in {1..200}; do
+    kitty @ --to "unix:$sock" ls >/dev/null 2>&1 && return 0
+    sleep 0.02
+  done
+  return 1
+}
+
+get_addr () {
+  # exact title match
+  hyprctl clients -j 2>/dev/null | python - "$1" <<'PY'
+import json,sys
+title=sys.argv[1]
+clients=json.load(sys.stdin)
+for c in clients:
+    if c.get("title")==title:
+        print(c.get("address",""))
+        sys.exit(0)
+sys.exit(1)
+PY
+}
+
+# ---- Launch the 2 main windows ----
+# Tests window starts with dmesg pane
+kitty --listen-on "unix:$tests_sock" --title "KB – Tests" \
+  bash -lc "
+    echo 'Motherboard / Bus Errors (dmesg)'
+    echo '--------------------------------'
+    sudo dmesg -T | grep -iE 'acpi|pcie|pci error|aer|bus error|firmware bug|iommu|dma|timeout|reset|hardware error|mce|edac' \
+      | tail -n 200 || echo 'No matches found.'
+    echo
+    read -rp 'Press Enter to close pane...'
+  " >/dev/null 2>&1 &
+
+# Monitor window is htop
+kitty --listen-on "unix:$mon_sock" --title "KB – Monitor (htop)" htop >/dev/null 2>&1 &
+
+wait_sock "$tests_sock" || exit 1
+wait_sock "$mon_sock" || exit 1
+
+# ---- Build Tests window as a clean 3-row vertical stack ----
+# Force a vertical split layout and add the other two panes
+kitty @ --to "unix:$tests_sock" goto-layout splits >/dev/null 2>&1 || true
+
+kitty @ --to "unix:$tests_sock" launch --location=vsplit --title "Disk Health" \
+  bash -lc "
+    echo 'Disk: $disk'
+    echo '--------------------------------'
+    sudo smartctl -H $disk 2>&1 || true
+    echo
+    read -rp 'Press Enter to close pane...'
+  " >/dev/null 2>&1 || true
+
+kitty @ --to "unix:$tests_sock" launch --location=vsplit --title "Sensors" \
+  bash -lc "
+    # sensors gets unreadable when tiny; show a shorter/cleaner view
+    sensors 2>/dev/null | sed -n '1,180p' || echo 'lm_sensors not configured'
+    echo
+    read -rp 'Press Enter to close pane...'
+  " >/dev/null 2>&1 || true
+
+# ---- Separate monitoring windows (NOT inside the diag instances) ----
+if command -v gtop >/dev/null 2>&1; then
+  kitty --listen-on "unix:$gtop_sock" --title "KB – gtop" gtop >/dev/null 2>&1 &
+fi
+
+if command -v btop >/dev/null 2>&1; then
+  kitty --listen-on "unix:$btop_sock" --title "KB – btop" btop >/dev/null 2>&1 &
+elif command -v bpytop >/dev/null 2>&1; then
+  kitty --listen-on "unix:$btop_sock" --title "KB – bpytop" bpytop >/dev/null 2>&1 &
+fi
+
+# ---- FORCE PLACEMENT (FLIPPED) ----
+# We want: gtop/btop/htop stack on LEFT, Tests stack on RIGHT
+sleep 0.15
+
+tests_addr="$(get_addr "KB – Tests" || true)"
+mon_addr="$(get_addr "KB – Monitor (htop)" || true)"
+gtop_addr="$(get_addr "KB – gtop" || true)"
+btop_addr="$(get_addr "KB – btop" || true)"
+[[ -z "$btop_addr" ]] && btop_addr="$(get_addr "KB – bpytop" || true)"
+
+# Right half: Tests
+if [[ -n "$tests_addr" ]]; then
+  hyprctl dispatch focuswindow "address:$tests_addr" >/dev/null 2>&1 || true
+  hyprctl dispatch movewindowpixel "exact 50% 0" >/dev/null 2>&1 || true
+  hyprctl dispatch resizewindowpixel "exact 50% 100%" >/dev/null 2>&1 || true
+fi
+
+# Left half: 3 stacked monitors
+# Top-left: htop, mid-left: gtop, bottom-left: btop
+place_left_stack () {
+  local addr="$1" y="$2" h="$3"
+  [[ -z "$addr" ]] && return 0
+  hyprctl dispatch focuswindow "address:$addr" >/dev/null 2>&1 || true
+  hyprctl dispatch movewindowpixel "exact 0 $y" >/dev/null 2>&1 || true
+  hyprctl dispatch resizewindowpixel "exact 50% $h" >/dev/null 2>&1 || true
+}
+
+# Heights as fractions of screen
+place_left_stack "$mon_addr"  "0"    "34%"
+place_left_stack "$gtop_addr" "34%"  "33%"
+place_left_stack "$btop_addr" "67%"  "33%"

@@ -1,0 +1,2 @@
+#!bin/sh
+rodi -modi "clipboard:greenclip print" -show clipboard

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Authenticate sudo once
+sudo -v
+
+# Helper to open a new kitty window
+open() {
+  kitty @ launch --type=window --title "$1" bash -lc "$2; echo; read -rp 'Press Enter to close...'"
+}
+
+# Detect root disk
+root_src="$(findmnt -n -o SOURCE /)"
+disk="$(lsblk -no PKNAME "$root_src" 2>/dev/null || true)"
+[[ -n "$disk" ]] && disk="/dev/$disk" || disk="/dev/nvme0n1"
+
+open "CPU / RAM Errors" \
+  "sudo ras-mc-ctl --summary"
+
+open "SMART Health ($disk)" \
+  "echo 'Using: $disk'; sudo smartctl -a $disk"
+
+open "NVMe Health" \
+  "if [[ $disk == /dev/nvme* ]]; then sudo nvme smart-log $disk; else echo 'Not NVMe'; fi"
+
+kitty @ launch --type=window --title "htop" htop

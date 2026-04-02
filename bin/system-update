@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+kitty -e sh -lc 'paru -Syu; echo; read -n 1 -s -r -p "Press any key to close..."'

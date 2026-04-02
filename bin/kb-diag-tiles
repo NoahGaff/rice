@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+command -v tmux >/dev/null || { echo "tmux not installed. Run: sudo pacman -S tmux"; exit 1; }
+
+SESSION="kb-diag"
+
+# Ask sudo once so panes don't hang on password prompts
+sudo -v
+
+tmux kill-session -t "$SESSION" 2>/dev/null || true
+tmux new-session -d -s "$SESSION"
+
+# Pane 1 (top-left): CPU/RAM errors
+tmux send-keys -t "$SESSION:0.0" 'sudo ras-mc-ctl --summary; echo; read -rp "Done. Press Enter..."' C-m
+
+# Split right (top-right): SMART summary of root disk
+tmux split-window -h -t "$SESSION:0.0"
+tmux send-keys -t "$SESSION:0.1" '
+root_src=$(findmnt -n -o SOURCE /);
+disk=$(lsblk -no PKNAME "$root_src" 2>/dev/null || true);
+if [[ -n "$disk" ]]; then dev="/dev/$disk"; else dev="/dev/nvme0n1"; fi;
+echo "Root: $root_src"; echo "Disk: $dev"; echo;
+sudo smartctl -a "$dev" || true;
+echo; read -rp "Done. Press Enter..."
+' C-m
+
+# Split bottom-left: NVMe health (if NVMe)
+tmux split-window -v -t "$SESSION:0.0"
+tmux send-keys -t "$SESSION:0.2" '
+root_src=$(findmnt -n -o SOURCE /);
+disk=$(lsblk -no PKNAME "$root_src" 2>/dev/null || true);
+dev="/dev/$disk";
+if [[ "$dev" == /dev/nvme* ]]; then
+  sudo nvme smart-log "$dev" || true
+else
+  echo "Not NVMe ($dev)"
+fi
+echo; read -rp "Done. Press Enter..."
+' C-m
+
+# Split bottom-right: htop
+tmux split-window -v -t "$SESSION:0.1"
+tmux send-keys -t "$SESSION:0.3" 'htop' C-m
+
+tmux select-layout -t "$SESSION" tiled
+tmux attach -t "$SESSION"

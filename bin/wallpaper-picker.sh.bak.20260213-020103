@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT="$HOME/.local/bin/set-wallpapers.sh"
+STATIC_DIR="$HOME/Pictures/wallpapers"
+VIDEO_DIR="$HOME/Videos/wallpapers"
+
+choose() {
+  local prompt="$1"; shift
+  # use wofi for simple prompts (works great for “Which display?” + “Mode”)
+  printf "%s\n" "$@" | wofi --dmenu --prompt "$prompt"
+}
+
+pick_file() {
+  local kind="$1" dir="$2" type="$3"  # type: static|video
+  [[ -d "$dir" ]] || { wofi --dmenu --prompt "Missing dir: $dir" <<<"OK" >/dev/null; exit 1; }
+
+  local file
+  local thumbdir="${XDG_CACHE_HOME:-$HOME/.cache}/wallpaper-thumbs"
+  mkdir -p "$thumbdir"
+
+  if command -v rofi >/dev/null 2>&1; then
+    if [[ "$type" == "static" ]]; then
+      file="$(
+        find "$dir" -maxdepth 1 -type f \
+          \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.webp" -o -iname "*.gif" \) \
+          -printf "%f\t%p\n" | sort |
+        awk -F'\t' '{ printf "%s\0icon\x1f%s\n", $1, $2 }' |
+        rofi -dmenu -i -show-icons -p "Pick $kind"
+      )"
+    else
+      # VIDEO: generate/cache thumbs, then feed icon path to rofi
+      file="$(
+        while IFS= read -r -d '' vid; do
+          base="$(basename "$vid")"
+          # safe-ish cache filename
+          key="$(printf "%s" "$vid" | sha256sum | awk '{print $1}')"
+          thumb="$thumbdir/${key}.png"
+
+          if [[ ! -s "$thumb" ]]; then
+            ffmpegthumbnailer -i "$vid" -o "$thumb" -s 512 -q 8 >/dev/null 2>&1 || true
+            # if thumb failed, remove it so we don’t keep broken zero-byte files
+            [[ -s "$thumb" ]] || rm -f "$thumb"
+          fi
+
+          if [[ -s "$thumb" ]]; then
+            printf "%s\0icon\x1f%s\n" "$base" "$thumb"
+          else
+            # no thumb available: still list it
+            printf "%s\n" "$base"
+          fi
+        done < <(
+          find "$dir" -maxdepth 1 -type f \
+            \( -iname "*.mp4" -o -iname "*.webm" -o -iname "*.mkv" \) \
+            -print0 | sort -z
+        ) | rofi -dmenu -i -show-icons -p "Pick $kind"
+      )"
+    fi
+  else
+    # wofi fallback (no thumbnails)
+    if [[ "$type" == "static" ]]; then
+      file="$(find "$dir" -maxdepth 1 -type f \
+        \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.webp" -o -iname "*.gif" \) \
+        -printf "%f\n" | sort | wofi --dmenu --prompt "Pick $kind")"
+    else
+      file="$(find "$dir" -maxdepth 1 -type f \
+        \( -iname "*.mp4" -o -iname "*.webm" -o -iname "*.mkv" \) \
+        -printf "%f\n" | sort | wofi --dmenu --prompt "Pick $kind")"
+    fi
+  fi
+
+  [[ -n "${file:-}" ]] || return 1
+  printf "%s/%s" "$dir" "$file"
+}
+
+set_var() {
+  local var="$1" val="$2"
+  sed -i -E "s|^[[:space:]]*${var}=.*|${var}=${val}|" "$SCRIPT"
+}
+
+TARGET="$(choose "Which display?" \
+  "LEFT / VERTICAL (DP-1)" \
+  "MIDDLE (DP-3)" \
+  "RIGHT (DP-2)")"
+
+[[ -n "${TARGET:-}" ]] || exit 0
+
+case "$TARGET" in
+  "LEFT / VERTICAL (DP-1)") ROLE="VERTICAL" ;;
+  "MIDDLE (DP-3)")          ROLE="MIDDLE" ;;
+  "RIGHT (DP-2)")           ROLE="LEFT" ;;     # DP-2 is your "LEFT" role in set-wallpapers.sh
+  *) exit 0 ;;
+esac
+
+MODE="$(choose "Mode for $ROLE" "static" "video")"
+[[ -n "${MODE:-}" ]] || exit 0
+
+set_var "MODE_${ROLE}" "\"${MODE}\""
+
+if [[ "$MODE" == "static" ]]; then
+  path="$(pick_file "static wallpaper" "$STATIC_DIR" "static")" || exit 0
+  set_var "STATIC_${ROLE}" "\"${path}\""
+else
+  path="$(pick_file "video wallpaper" "$VIDEO_DIR" "video")" || exit 0
+  set_var "VIDEO_${ROLE}" "\"${path}\""
+fi
+
+"$SCRIPT"

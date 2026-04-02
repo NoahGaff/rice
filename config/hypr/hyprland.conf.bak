@@ -1,0 +1,419 @@
+# #######################################################################################
+# Sakura Shop (Hyprland)
+# Cleaned + clearly labeled
+#
+# Goals:
+# - Single source of truth for desktop identity + Qt theming lives in:
+#     ~/.config/environment.d/10-theme.conf
+#   (XDG_CURRENT_DESKTOP=Hyprland:KDE, XDG_SESSION_DESKTOP=KDE, QT_QPA_PLATFORMTHEME=kde)
+# - Hyprland.conf only keeps compositor / hardware / cursor *Hypr-specific* env.
+# - Exec-once exports the environment.d values into systemd + DBus early (portals + apps).
+# #######################################################################################
+
+$mod = SUPER
+$mainMod = SUPER
+
+#############################
+### 0) SESSION AUTOSTART  ###
+#############################
+
+# Remove this while troubleshooting
+# exec-once = hyprpm reload -n && hyprctl reload
+
+# Keep env export early
+exec-once = dbus-update-activation-environment --systemd --all
+
+# Hyprland-recommended portal fallback
+exec-once = bash -lc 'sleep 2; killall -e xdg-desktop-portal-hyprland 2>/dev/null; killall -e xdg-desktop-portal 2>/dev/null; /usr/lib/xdg-desktop-portal-hyprland & sleep 2; /usr/lib/xdg-desktop-portal &'
+
+# Polkit
+exec-once = /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1
+
+# Wallpapers
+exec-once = ~/.config/hypr/scripts/restore-static-walls.fish
+
+# Walker / Elephant
+exec-once = elephant service enable
+exec-once = systemctl --user start elephant.service
+exec-once = walker --gapplication-service
+
+# clipboard history watchers
+exec-once = wl-paste --type text --watch cliphist store
+exec-once = wl-paste --type image --watch cliphist store
+
+# keep clipboard alive after source app closes
+exec-once = wl-clip-persist --clipboard regular
+
+# UI
+exec-once = hyprpm reload -n
+exec-once = sh -c "sleep 3; pkill waybar || true; waybar >> ~/.cache/waybar.autostart.log 2>&1"
+exec-once = swaync
+
+################
+### MONITORS ###
+################
+
+# Fallback/default
+monitor = ,preferred,auto,auto
+
+# Your monitors
+monitor = DP-3,2560x1440@360,0x0,1
+monitor = DP-2,3840x2160@240,2560x0,1.5
+monitor = DP-1,2560x1440@144,-1440x-560,1,transform,1
+
+
+###################
+### MY PROGRAMS ###
+###################
+
+$terminal    = kitty
+$fileManager = dolphin
+$menu        = walker
+
+########################################
+### 1) GPU / DRM / COMPOSITOR ENVS   ###
+########################################
+# Keep ONLY Hypr/compositor-specific knobs here.
+# Desktop identity + Qt theme belongs in environment.d/10-theme.conf.
+
+# NVIDIA GLX vendor selection (useful for some Xwayland/OpenGL cases)
+env = __GLX_VENDOR_LIBRARY_NAME,nvidia
+
+# GBM backend for NVIDIA + Wayland
+env = GBM_BACKEND,nvidia-drm
+
+# Disable vsync in NVIDIA OpenGL (latency/tearing tradeoff)
+env = __GL_SYNC_TO_VBLANK,0
+
+# If you have cursor corruption/flicker on NVIDIA, this often helps
+env = WLR_NO_HARDWARE_CURSORS,1
+
+# Troubleshooting toggles (uncomment ONLY if needed)
+# env = WLR_DRM_NO_ATOMIC,1
+# env = WLR_RENDERER_ALLOW_SOFTWARE,1
+
+
+########################
+### 2) CURSOR ENVS   ###
+########################
+# Optional redundancy — keeps Xwayland + Wayland cursors consistent.
+env = XCURSOR_THEME,Glitch
+env = XCURSOR_SIZE,32
+#env = HYPRCURSOR_THEME,Glitch
+#env = HYPRCURSOR_SIZE,32
+
+
+#####################
+### LOOK AND FEEL ###
+#####################
+
+env = GTK_THEME,catppuccin-mocha-peach-standard+default
+
+#dophin font and theme formatting
+env = QT_QPA_PLATFORMTHEME,qt6ct
+
+general {
+    gaps_in = 2
+    gaps_out = 10
+    border_size = 2
+
+    col.active_border = rgb(f4a6c1) rgb(a6f4d9) 45deg
+    col.inactive_border = rgb(0a75ad) rgb(ad0a75) 45deg
+
+    resize_on_border = false
+    allow_tearing = false
+    layout = dwindle
+}
+
+decoration {
+    rounding = 5
+    rounding_power = 2
+
+    active_opacity = 1.0
+    inactive_opacity = 0.85
+
+    shadow {
+        enabled = true
+        range = 20
+        render_power = 3
+        color = rgba(00000055)
+    }
+
+    blur {
+        enabled = true
+        size = 9
+        passes = 3
+        vibrancy = 0.1696
+    }
+}
+
+animations {
+    enabled = true
+
+    bezier = easeOutQuint,   0.23, 1,    0.32, 1
+    bezier = easeInOutCubic, 0.65, 0.05, 0.36, 1
+    bezier = linear,         0,    0,    1,    1
+    bezier = almostLinear,   0.5,  0.5,  0.75, 1
+    bezier = quick,          0.15, 0,    0.1,  1
+
+    animation = global,        1,     10,    default
+    animation = border,        1,     5.39,  easeOutQuint
+    animation = windows,       1,     4.79,  easeOutQuint
+    animation = windowsIn,     1,     4.1,   easeOutQuint, popin 87%
+    animation = windowsOut,    1,     1.49,  linear,       popin 87%
+    animation = fadeIn,        1,     1.73,  almostLinear
+    animation = fadeOut,       1,     1.46,  almostLinear
+    animation = fade,          1,     3.03,  quick
+    animation = layers,        1,     3.81,  easeOutQuint
+    animation = layersIn,      1,     4,     easeOutQuint, fade
+    animation = layersOut,     1,     1.5,   linear,       fade
+    animation = fadeLayersIn,  1,     1.79,  almostLinear
+    animation = fadeLayersOut, 1,     1.39,  almostLinear
+    animation = workspaces,    1,     1.94,  almostLinear, fade
+    animation = workspacesIn,  1,     1.21,  almostLinear, fade
+    animation = workspacesOut, 1,     1.94,  almostLinear, fade
+    animation = zoomFactor,    1,     7,     quick
+}
+
+dwindle {
+    pseudotile = true
+    preserve_split = true
+}
+
+master {
+    new_status = master
+}
+
+
+#############
+### INPUT ###
+#############
+
+input {
+    kb_layout = us
+    kb_variant =
+    kb_model =
+    kb_options =
+    kb_rules =
+
+    follow_mouse = 1
+    float_switch_override_focus = 1
+    sensitivity = 0
+
+    touchpad {
+        natural_scroll = false
+    }
+}
+
+gesture = 3, horizontal, workspace
+
+device {
+    name = epic-mouse-v1
+    sensitivity = -0.5
+}
+
+
+###################
+### KEYBINDINGS ###
+###################
+
+# Core
+bind = $mainMod, Q, exec, $terminal
+bind = $mainMod, Space, exec, $menu
+bind = $mainMod, F, exec, $fileManager
+bind = $mainMod, 1, togglefloating,
+bind = $mainMod, 2, togglesplit,
+bind = $mainMod, 3, pseudo,
+bind = $mainMod, delete, exec, command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch exit
+
+# Brightness (NOTE: your original had the same command twice; kept as-isbind = $mbind = $mod, Space, exec, ~/.local/bin/launcher.shod,bind = , F13, exec, ddcutil setvcp 10 - 5 --display 1
+bind = , F14, exec, ddcutil setvcp 10 + 5 --display 1
+
+bind = $mod SHIFT, escape, dpms, toggle
+
+# Special workspace (scratchpad)
+bind = $mainMod, F12, togglespecialworkspace, magicbind = $mod, Space, exec, ~/.local/bin/launcher.sh
+bind = $mainMod SHIFT, F12, movetoworkspace, special:magic
+
+# open clipboard history on Ctrl+Mod+V
+bind = $mainMod CTRL, V, exec, cliphist list | wofi --dmenu | cliphist decode | wl-copy
+
+# Scroll workspaces (mainMod + scroll)
+bind = $mainMod, mouse_down, workspace, e+1
+bind = $mainMod, mouse_up, workspace, e-1
+
+# Mouse move/resize (default: Mod only)
+bindm = $mainMod, mouse:272, movewindow
+bindm = $mainMod, mouse:273, resizewindow
+
+# Audio / brightness keys
+bindel = ,XF86AudioRaiseVolume, exec, wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+
+bindel = ,XF86AudioLowerVolume, exec, wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+bindel = ,XF86AudioMute, exec, wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+bindel = ,XF86AudioMicMute, exec, wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle
+bindel = ,XF86MonBrightnessUp, exec, brightnessctl -e4 -n2 set 5%+
+bindel = ,XF86MonBrightnessDown, exec, brightnessctl -e4 -n2 set 5%-
+
+# Media keys (playerctl)
+bindl = , XF86AudioNext, exec, playerctl next
+bindl = , XF86AudioPause, exec, playerctl play-pause
+bindl = , XF86AudioPlay, exec, playerctl play-pause
+bindl = , XF86AudioPrev, exec, playerctl previous
+bind = SUPER CTRL SHIFT, A, exec, audio-reset
+
+# Apps
+bind = $mod, O, exec, obsidian
+bind = $mod, G, exec, chromium
+bind = $mod, D, exec, discord
+bind = $mod SHIFT, P, exec, ~/.local/bin/open-proxmox.sh
+bind = $mod, J, exec, chromium --app=https://media.noahgaffney.me
+
+# WM controls
+bind = $mod SHIFT, Q, killactive
+bind = $mod SHIFT, R, exec, hyprctl reload
+
+# Focus movement
+bind = $mod, left,  movefocus, l
+bind = $mod, right, movefocus, r
+bind = $mod, up,    movefocus, u
+bind = $mod, down,  movefocus, d
+
+# Move window + follow it
+bind = $mod SHIFT, left,  movewindow, l
+bind = $mod SHIFT, right, movewindow, r
+bind = $mod SHIFT, up,    movewindow, u
+bind = $mod SHIFT, down,  movewindow, d
+
+bind = $mod SHIFT, left,  focuswindow, active
+bind = $mod SHIFT, right, focuswindow, active
+bind = $mod SHIFT, up,    focuswindow, active
+bind = $mod SHIFT, down,  focuswindow, active
+
+# Workspaces on Mod+F1..F10
+bind = $mod, F1,  workspace, 1
+bind = $mod, F2,  workspace, 2
+bind = $mod, F3,  workspace, 3
+bind = $mod, F4,  workspace, 4
+bind = $mod, F5,  workspace, 5
+bind = $mod, F6,  workspace, 6
+bind = $mod, F7,  workspace, 7
+bind = $mod, F8,  workspace, 8
+bind = $mod, F9,  workspace, 9
+bind = $mod, F10, workspace, 10
+
+# Move window to workspace on Mod+Shift+F1..F10
+bind = $mod SHIFT, F1,  movetoworkspace, 1
+bind = $mod SHIFT, F2,  movetoworkspace, 2
+bind = $mod SHIFT, F3,  movetoworkspace, 3
+bind = $mod SHIFT, F4,  movetoworkspace, 4
+bind = $mod SHIFT, F5,  movetoworkspace, 5
+bind = $mod SHIFT, F6,  movetoworkspace, 6
+bind = $mod SHIFT, F7,  movetoworkspace, 7
+bind = $mod SHIFT, F8,  movetoworkspace, 8
+bind = $mod SHIFT, F9,  movetoworkspace, 9
+bind = $mod SHIFT, F10, movetoworkspace, 10
+
+bind = $mod, TAB, hyprexpo:expo, toggle
+
+# Screenshots (Print)
+bind = , Print, exec, sh -lc 'grim -g "$(env XCURSOR_THEME=Adwaita slurp)" "$HOME/Pictures/screenshot-$(date +%F_%T).png"'
+bind = SHIFT, Print, exec, sh -lc 'grim -g "$(env XCURSOR_THEME=Adwaita slurp)" - | wl-copy'
+
+# Wallpaper quick binds
+#bind = $mod, W, exec, /home/noah/.local/bin/set-wallpapers.sh
+#bind = $mod, B, exec, /home/noah/.local/bin/wallpaper-picker.sh
+bind = SUPER, B, exec, ~/.local/bin/wallpicker public
+bind = SUPER SHIFT, B, exec, ~/.local/bin/wallpicker private
+
+# Config / tools menus
+bind = $mod, C, exec, ~/.local/bin/conf-menu.sh
+bind = SUPER, S, exec, ~/.local/bin/ssh-menu.sh
+bind = SUPER CTRL SHIFT, D, exec, ~/.local/bin/kb-diag
+
+
+##############################
+### WINDOWS AND WORKSPACES ###
+##############################
+
+plugin {
+    hyprexpo {
+        columns = 3
+        gap_size = 10
+        bg_col = rgb(111111)
+        workspace_method = center current
+    }
+}
+
+windowrule {
+    name = suppress-maximize-events
+    match:class = .*
+    suppress_event = maximize
+}
+
+xwayland {
+  force_zero_scaling = true
+}
+
+windowrule {
+    name = float-pavucontrol
+    match:class = ^(org\.pulseaudio\.pavucontrol|pavucontrol|Pavucontrol)$
+    float = yes
+    center = yes
+    size = 650 850
+}
+
+windowrule {
+    name = float-nmgui
+    match:title = ^.*Network Manager.*$
+    float = yes
+    center = yes
+    size = 420 690
+}
+
+windowrule {
+    name = float-bt
+    match:title = ^.*Bluetooth Devices.*$
+    float = yes
+    center = yes
+    size = 420 420
+}
+
+windowrule {
+    name = fix-xwayland-drags
+    match:class = ^$
+    match:title = ^$
+    match:xwayland = true
+    match:float = true
+    match:fullscreen = false
+    match:pin = false
+    no_focus = true
+}
+
+windowrule {
+    name = move-hyprland-run
+    match:class = hyprland-run
+    move = 20 monitor_h-120
+    float = yes
+}
+
+# kill the old named gaming rules first
+
+workspace = 8, monitor:DP-3, persistent:true, gapsin:0, gapsout:0, border:false, rounding:false, decorate:false
+
+windowrule {
+    name = steam-game-dp3
+    match:initial_class = ^(steam_app_[0-9]+|game\.exe|launcher\.exe)$
+    workspace = 8 silent
+    monitor = DP-3
+    fullscreen_state = 2 2
+}
+
+# keep this only once in your config
+exec-once = xrandr --output DP-3 --primary
+
+# Kitty transparency + blur
+
+# Kitty transparency (new windowrule syntax)
+windowrule = opacity 0.75 override 0.75 override 1.0 override, match:class kitty
+
+

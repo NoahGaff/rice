@@ -1,0 +1,271 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CLASS="kbdiag"
+SPECIAL_NAME="kbdiag"
+
+need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing dependency: $1" >&2; exit 1; }; }
+need hyprctl
+need jq
+need kitty
+
+HAS_BTOP=0; command -v btop >/dev/null 2>&1 && HAS_BTOP=1
+HAS_HTOP=0; command -v htop >/dev/null 2>&1 && HAS_HTOP=1
+HAS_GTOP=0; command -v gtop >/dev/null 2>&1 && HAS_GTOP=1
+HAS_SENSORS=0; command -v sensors >/dev/null 2>&1 && HAS_SENSORS=1
+HAS_SMARTCTL=0; command -v smartctl >/dev/null 2>&1 && HAS_SMARTCTL=1
+HAS_JOURNALCTL=0; command -v journalctl >/dev/null 2>&1 && HAS_JOURNALCTL=1
+
+clients_json() { hyprctl clients -j; }
+
+addr_for_title() {
+  local title="$1"
+  clients_json | jq -r --arg c "$CLASS" --arg t "$title" '
+    map(select(.class == $c and .title == $t)) | .[0].address // empty
+  '
+}
+
+wait_for_addr() {
+  local title="$1"
+  local a=""
+  for _ in {1..120}; do
+    a="$(addr_for_title "$title")"
+    [[ -n "$a" ]] && { echo "$a"; return 0; }
+    sleep 0.05
+  done
+  echo "Timed out waiting for window: $title" >&2
+  return 1
+}
+
+TARGET_MON="$(hyprctl activeworkspace -j | jq -r '.monitor // empty')"
+[[ -z "$TARGET_MON" ]] && { echo "Could not determine active workspace monitor." >&2; exit 1; }
+
+focus_target_monitor() {
+  hyprctl dispatch focusmonitor "$TARGET_MON" >/dev/null 2>&1 || true
+}
+
+get_workarea_for_monitor() {
+  local mon
+  mon="$(hyprctl monitors -j | jq -r --arg m "$TARGET_MON" '.[] | select(.name==$m)')"
+
+  local mx my mw mh
+  mx="$(jq -r '.x' <<<"$mon")"
+  my="$(jq -r '.y' <<<"$mon")"
+  mw="$(jq -r '.width' <<<"$mon")"
+  mh="$(jq -r '.height' <<<"$mon")"
+
+  local rt rr rb rl
+  rt="$(jq -r '.reserved[0]' <<<"$mon")"
+  rr="$(jq -r '.reserved[1]' <<<"$mon")"
+  rb="$(jq -r '.reserved[2]' <<<"$mon")"
+  rl="$(jq -r '.reserved[3]' <<<"$mon")"
+
+  echo "$((mx+rl)) $((my+rt)) $((mw-rl-rr)) $((mh-rt-rb))"
+}
+
+place_window() {
+  local addr="$1" x="$2" y="$3" w="$4" h="$5"
+
+  focus_target_monitor
+  hyprctl dispatch focuswindow "address:$addr" >/dev/null 2>&1 || true
+
+  local isf
+  isf="$(clients_json | jq -r --arg a "$addr" 'map(select(.address==$a)) | .[0].floating // 0')"
+  if [[ "$isf" == "0" ]]; then
+    hyprctl dispatch togglefloating "address:$addr" >/dev/null 2>&1 || true
+  fi
+
+  hyprctl dispatch resizewindowpixel "exact ${w} ${h},address:${addr}" >/dev/null 2>&1 || true
+  hyprctl dispatch movewindowpixel   "exact ${x} ${y},address:${addr}" >/dev/null 2>&1 || true
+}
+
+spawn_kitty() {
+  local title="$1"
+  local cmd="$2"
+  hyprctl dispatch exec "[workspace special:${SPECIAL_NAME} silent] kitty --class \"$CLASS\" --title \"$title\" bash -lc \"$cmd\"" >/dev/null 2>&1
+}
+
+# Toggle off if already present
+if clients_json | jq -e --arg c "$CLASS" 'any(.[]; .class==$c)' >/dev/null; then
+  focus_target_monitor
+  hyprctl dispatch togglespecialworkspace "$SPECIAL_NAME" >/dev/null
+  exit 0
+fi
+
+focus_target_monitor
+hyprctl dispatch togglespecialworkspace "$SPECIAL_NAME" >/dev/null
+
+read -r WX WY WW WH < <(get_workarea_for_monitor)
+
+GAP=14
+COLW=$(( (WW - GAP) / 2 ))
+ROWH=$(( (WH - 2*GAP) / 3 ))
+
+LX=$WX
+RX=$(( WX + COLW + GAP ))
+
+Y1=$WY
+Y2=$(( WY + ROWH + GAP ))
+Y3=$(( WY + 2*(ROWH + GAP) ))
+
+# Titles
+T_KERN="KB-DIAG:KERNEL"
+T_DISK="KB-DIAG:DISKSCAN"
+T_SENS="KB-DIAG:SENSORS"
+T_TOP="KB-DIAG:TOP"
+T_GTOP="KB-DIAG:GTOP"
+T_EXTRA="KB-DIAG:EXTRA"
+
+# ---- Commands ----
+
+# Kernel / bus errors:
+# Prefer sudo dmesg; if that fails, fall back to journalctl -k.
+KERN_FILTER="acpi|pcie|pci error|aer|bus error|firmware bug|iommu|dma|timeout|reset"
+KERN_CMD='
+set -e
+echo "== Kernel / bus errors (filtered) =="
+echo
+if sudo -n dmesg -T >/dev/null 2>&1; then
+  sudo -n dmesg -T | grep -iE "'"$KERN_FILTER"'" || true
+elif command -v journalctl >/dev/null 2>&1; then
+  journalctl -k -b --no-pager | grep -iE "'"$KERN_FILTER"'" || true
+else
+  echo "No permission for dmesg, and journalctl not available."
+fi
+echo
+read -n1 -p "press any key"
+'
+
+# Disk scan:
+# 1) Show what’s attached (model/serial/fs/mount)
+# 2) SMART scan + best-effort health checks for each disk
+#    - tries default
+#    - if USB bridge and default fails, tries sntjmicron (common for USB NVMe JMicron)
+DISK_CMD='
+set -e
+echo "== Disks / partitions (what the system sees) =="
+echo
+lsblk -o NAME,TYPE,SIZE,MODEL,SERIAL,TRAN,FSTYPE,MOUNTPOINTS
+echo
+echo "== Filesystem usage =="
+echo
+df -hT -x tmpfs -x devtmpfs 2>/dev/null || df -h 2>/dev/null || true
+echo
+
+if ! command -v smartctl >/dev/null 2>&1; then
+  echo "smartctl not installed (smartmontools)."
+  echo
+  read -n1 -p "press any key"
+  exit 0
+fi
+
+if ! sudo -n true 2>/dev/null; then
+  echo "sudo is not NOPASSWD for this script."
+  echo "Set /etc/sudoers.d/kb-diag to allow: /usr/sbin/smartctl"
+  echo
+  read -n1 -p "press any key"
+  exit 0
+fi
+
+echo "== SMART scan (auto-detected devices) =="
+echo
+sudo -n smartctl --scan-open || true
+echo
+
+echo "== SMART health summary (best-effort) =="
+echo
+
+# Grab device nodes from scan-open output:
+# Example line: /dev/sdd -d scsi # ... or /dev/nvme0 -d nvme # ...
+mapfile -t DEVS < <(sudo -n smartctl --scan-open 2>/dev/null | awk "{print \$1}" | sort -u)
+
+if [[ ${#DEVS[@]} -eq 0 ]]; then
+  echo "No SMART-capable devices found via scan-open."
+  echo
+  read -n1 -p "press any key"
+  exit 0
+fi
+
+for dev in "${DEVS[@]}"; do
+  echo "-- $dev --"
+  # First try plain health
+  if sudo -n smartctl -H "$dev" >/dev/null 2>&1; then
+    sudo -n smartctl -H "$dev" | sed -n "1,12p"
+  else
+    # Common USB NVMe JMicron bridge fallback
+    if sudo -n smartctl -H -d sntjmicron "$dev" >/dev/null 2>&1; then
+      sudo -n smartctl -H -d sntjmicron "$dev" | sed -n "1,14p"
+      echo "   (used -d sntjmicron)"
+    elif sudo -n smartctl -H -d sntjmicron/sat "$dev" >/dev/null 2>&1; then
+      sudo -n smartctl -H -d sntjmicron/sat "$dev" | sed -n "1,14p"
+      echo "   (used -d sntjmicron/sat)"
+    else
+      echo "   SMART health: unavailable for this device/bridge."
+    fi
+  fi
+  echo
+done
+
+read -n1 -p "press any key"
+'
+
+# Sensors
+SENS_CMD='
+set -e
+if command -v sensors >/dev/null 2>&1; then
+  sensors || true
+else
+  echo "sensors not available (lm_sensors)."
+  echo "Install: sudo pacman -S lm_sensors && sudo sensors-detect"
+fi
+echo
+read -n1 -p "press any key"
+'
+
+# Right column tools
+if [[ "$HAS_BTOP" == "1" ]]; then
+  TOP_CMD="btop"
+elif [[ "$HAS_HTOP" == "1" ]]; then
+  TOP_CMD="htop"
+else
+  TOP_CMD="bash -lc 'echo \"Install btop or htop\"; read -n1'"
+fi
+
+if [[ "$HAS_GTOP" == "1" ]]; then
+  GTOP_CMD="gtop"
+else
+  GTOP_CMD="bash -lc 'echo \"gtop missing (npm i -g gtop)\"; read -n1'"
+fi
+
+if command -v ptop >/dev/null 2>&1; then
+  EXTRA_CMD="ptop"
+else
+  EXTRA_CMD="htop"
+fi
+
+# Spawn windows
+spawn_kitty "$T_KERN" "$KERN_CMD"
+spawn_kitty "$T_DISK" "$DISK_CMD"
+spawn_kitty "$T_SENS" "$SENS_CMD"
+spawn_kitty "$T_TOP" "$TOP_CMD"
+spawn_kitty "$T_GTOP" "$GTOP_CMD"
+spawn_kitty "$T_EXTRA" "$EXTRA_CMD"
+
+# Collect addresses
+A1="$(wait_for_addr "$T_KERN")"
+A2="$(wait_for_addr "$T_DISK")"
+A3="$(wait_for_addr "$T_SENS")"
+A4="$(wait_for_addr "$T_TOP")"
+A5="$(wait_for_addr "$T_GTOP")"
+A6="$(wait_for_addr "$T_EXTRA")"
+
+# Place
+place_window "$A1" "$LX" "$Y1" "$COLW" "$ROWH"
+place_window "$A2" "$LX" "$Y2" "$COLW" "$ROWH"
+place_window "$A3" "$LX" "$Y3" "$COLW" "$ROWH"
+place_window "$A4" "$RX" "$Y1" "$COLW" "$ROWH"
+place_window "$A5" "$RX" "$Y2" "$COLW" "$ROWH"
+place_window "$A6" "$RX" "$Y3" "$COLW" "$ROWH"
+
+focus_target_monitor
+hyprctl dispatch focuswindow "address:$A1" >/dev/null 2>&1 || true

@@ -1,0 +1,492 @@
+/* =========================================================
+ * COLORS
+ * ========================================================= */
+/* {{{ */
+@define-color background1 rgba(32, 32, 48, 0.65);
+@define-color background2 rgba(21, 21, 32, 0.50);
+@define-color sepepator  rgba(49, 50, 68, 0.65);
+
+@define-color warning #f38ba8;
+@define-color caution #45475a;
+@define-color performance #f5c2e7;
+@define-color audio #cba6f7;
+@define-color misc #94e2d5;
+@define-color date #a6e3a1;
+@define-color work #b4befe;
+@define-color window #b4befe;
+@define-color resize #eba0ac;
+@define-color process #89b4fa;
+@define-color hookup #000000;
+
+@define-color background @background2;
+
+@define-color tab_pink2 #ff8fd6;
+@define-color tab_blue2 #6aa8ff;
+@define-color mute_pink2 #ff8fd6;
+/* }}} */
+
+
+/* =========================================================
+ * GLOBAL RESET
+ * ========================================================= */
+/* {{{ */
+* {
+  border: none;
+  border-radius: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  box-shadow: none;
+  text-shadow: none;
+  font-family: "OpenDyslexic Nerd Font", "Symbols Nerd Font", sans-serif;
+  font-size: 11pt;
+}
+
+button {
+  outline: none;
+  -gtk-outline-radius: 0px;
+  box-shadow: none;
+}
+/* }}} */
+
+
+/* =========================================================
+ * ANIMATIONS
+ * ========================================================= */
+/* {{{ */
+@keyframes blink-urgent-workspace { to { color: @warning; } }
+@keyframes blink-critical-text    { to { color: @sepepator; } }
+@keyframes blink-modifier-text    { to { color: @sepepator; } }
+@keyframes blink-special-workspace{ to { color: @window; } }
+
+@keyframes blink-critical-battery { to { border-color: @warning; } }
+@keyframes blink-warning-battery  { to { border-color: @warning; } }
+@keyframes blink-discharging-battery { to { border-color: @warning; } }
+@keyframes blink-charging-battery { to { border-color: @misc; } }
+@keyframes blink-full-battery     { to { border-color: @misc; } }
+/* }}} */
+
+
+/* =========================================================
+ * MAIN BAR SHELL
+ * ========================================================= */
+/* {{{ */
+#waybar.main {
+  background: @background2;
+  font-family: "OpenDyslexic Nerd Font", "Symbols Nerd Font", sans-serif;
+  font-size: 11pt;
+  font-weight: 400;
+  border-radius: 6pt;
+  border: 1px solid alpha(@sepepator, 0.55);
+}
+
+#waybar.main > box,
+#waybar.main widget,
+#waybar.main label {
+  min-height: 24px;
+  padding-top: 1px;
+  padding-bottom: 1px;
+}
+/* }}} */
+
+/* =========================================================
+ * LEFT SIDE — BUBBLE / PILL WORKSPACES
+ * ========================================================= */
+/* {{{ */
+@define-color ws_inactive #89b4fa;   /* light blue */
+@define-color ws_occupied #f5c2e7;   /* pastel pink */
+@define-color ws_active   #a6e3a1;   /* pastel green */
+
+@keyframes ws-active-pulse {
+  0% {
+    box-shadow: 0 0 0 0 alpha(@ws_active, 0.00);
+  }
+  50% {
+    box-shadow: 0 0 0 5px alpha(@ws_active, 0.16);
+  }
+  100% {
+    box-shadow: 0 0 0 0 alpha(@ws_active, 0.00);
+  }
+}
+
+@keyframes ws-occupied-pulse {
+  0% {
+    box-shadow: 0 0 0 0 alpha(@ws_occupied, 0.00);
+  }
+  50% {
+    box-shadow: 0 0 0 4px alpha(@ws_occupied, 0.12);
+  }
+  100% {
+    box-shadow: 0 0 0 0 alpha(@ws_occupied, 0.00);
+  }
+}
+
+#waybar.main #workspaces,
+#waybar.main #workspaces * {
+  border: none;
+  outline: none;
+  box-shadow: none;
+  -gtk-outline-radius: 0;
+}
+
+#waybar.main #workspaces {
+  background: transparent;
+  background-image: none;
+  margin: 0;
+  padding: 0 6px 0 8px;
+}
+
+#waybar.main #workspaces button {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0 4px 0 0;
+  min-height: 0;
+  transition: none;
+}
+
+#waybar.main #workspaces button label {
+  color: alpha(@window, 0.92);
+  font-style: italic;
+  font-weight: 600;
+
+  padding: 3px 10px;
+  min-width: 18px;
+
+  background: alpha(@ws_inactive, 0.18);
+  border: 1px solid alpha(@ws_inactive, 0.32);
+  border-radius: 999px;
+}
+
+/* hover */
+#waybar.main #workspaces button:hover label {
+  color: @window;
+  background: alpha(@ws_inactive, 0.25);
+  border-color: alpha(@ws_inactive, 0.50);
+}
+
+/* occupied / in use */
+#waybar.main #workspaces button.visible label {
+  color: #1e1e2e;
+  background: alpha(@ws_occupied, 0.65);
+  border-color: alpha(@ws_occupied, 0.88);
+  animation: ws-occupied-pulse 2.6s ease-in-out infinite;
+}
+
+/* active */
+#waybar.main #workspaces button.active label {
+  color: #1e1e2e;
+  background: alpha(@ws_active, 0.82);
+  border-color: alpha(@ws_active, 1.00);
+  animation: ws-active-pulse 1.9s ease-in-out infinite;
+}
+
+/* urgent */
+#waybar.main #workspaces button.urgent label,
+#waybar.main #workspaces button.special.urgent label {
+  color: #1e1e2e;
+  background: alpha(@warning, 0.82);
+  border-color: alpha(@warning, 1.00);
+  animation: ws-active-pulse 1.0s ease-in-out infinite;
+}
+
+/* special active */
+#waybar.main #workspaces button.special.active label {
+  color: #1e1e2e;
+  background: alpha(@misc, 0.78);
+  border-color: alpha(@misc, 1.00);
+  animation: ws-active-pulse 2.2s ease-in-out infinite;
+}
+/* }}} */
+
+/* =========================================================
+ * LEFT SIDE — SPACERS / SEAMS
+ * ========================================================= */
+/* {{{ */
+#waybar.main #custom-spacer1,
+#waybar.main #custom-spacer2,
+#waybar.main #custom-spacer3,
+#waybar.main #custom-spacer4,
+#waybar.main #custom-spacer5,
+#waybar.main #custom-spacer6 {
+  font-size: 16pt;
+  font-weight: bold;
+  color: transparent;
+
+  padding-left: 4px;
+  padding-right: 4px;
+
+  margin-top: -1px;
+  margin-bottom: -1px;
+
+  background-clip: padding-box;
+  -gtk-icon-transform: translateY(0.5px);
+}
+
+#waybar.main #custom-spacer1 {
+  background-image: linear-gradient(
+    63.435deg,
+    transparent 47.5%,
+    @sepepator 47.6%,
+    @sepepator 52.4%,
+    @background1 52.5%
+  );
+}
+
+#waybar.main #custom-spacer2 {
+  background-image: linear-gradient(
+    63.435deg,
+    @background1 47.5%,
+    @sepepator 47.6%,
+    @sepepator 52.4%,
+    @background2 52.5%
+  );
+}
+
+#waybar.main #custom-spacer3 {
+  background-image: linear-gradient(
+    63.435deg,
+    @background2 47.5%,
+    @sepepator 47.6%,
+    @sepepator 52.4%,
+    @background1 52.5%
+  );
+}
+
+#waybar.main #custom-spacer4 {
+  background-image: linear-gradient(
+    63.435deg,
+    @background1 47.5%,
+    @sepepator 47.6%,
+    @sepepator 52.4%,
+    @background2 52.5%
+  );
+}
+
+#waybar.main #custom-spacer5,
+#waybar.main #custom-spacer6 {
+  background-image: linear-gradient(
+    -63.435deg,
+    transparent 47.5%,
+    @sepepator 47.6%,
+    @sepepator 52.4%,
+    transparent 52.5%
+  );
+}
+/* }}} */
+
+
+/* =========================================================
+ * CENTER
+ * ========================================================= */
+/* {{{ */
+#waybar.main #window {
+  color: @window;
+  box-shadow: none;
+  font-style: italic;
+  background: transparent;
+  min-height: 12px;
+  padding-top: 0px;
+  padding-bottom: 0px;
+}
+/* }}} */
+
+
+/* =========================================================
+ * RIGHT SIDE — MODULE SPACING
+ * ========================================================= */
+/* {{{ */
+#cava,
+#waybar.main #custom-cpu,
+#waybar.main #custom-memory,
+#waybar.main #custom-storage,
+#waybar.main #custom-headsetbattery,
+#waybar.main #custom-nvidia,
+#waybar.main #custom-spotifyicon,
+#waybar.main #custom-weather,
+#waybar.main #custom-battery,
+#waybar.main #keyboard-state,
+#waybar.main #network,
+#waybar.main #battery,
+#waybar.main #backlight,
+#waybar.main #clock,
+#waybar.main #cpu,
+#waybar.main #language,
+#waybar.main #memory.swap,
+#waybar.main #memory.ram,
+#waybar.main #submap,
+#waybar.main #pulseaudio,
+#waybar.main #temperature,
+#waybar.main #traym,
+#waybar.main #window,
+#waybar.main #disk,
+#custom-timer,
+#waybar.main #bluetooth {
+  padding-left: 6px;
+  padding-right: 4px;
+}
+
+#custom-cpu,
+#custom-nvidia,
+#custom-memory,
+#custom-storage,
+#disk,
+#memory-swap,
+#bluetooth,
+#network-wifi,
+#network-info,
+#pulseaudio-input,
+#pulseaudio-output,
+#custom-spotifyicon,
+#custom-headsetbattery,
+#hyprland-language,
+#custom-battery,
+#clock,
+#tray {
+  min-height: 12px;
+  padding-top: 0px;
+  padding-bottom: 0px;
+}
+/* }}} */
+
+
+/* =========================================================
+ * RIGHT SIDE — MODULE COLORS
+ * ========================================================= */
+/* {{{ */
+#waybar.main #custom-cpu,
+#waybar.main #custom-nvidia,
+#waybar.main #custom-memory,
+#waybar.main #custom-storage,
+#waybar.main #custom-swap,
+#waybar.main #cpu,
+#waybar.main #temperature,
+#waybar.main #memory.ram,
+#waybar.main #memory.swap,
+#waybar.main #disk,
+#waybar.main #bluetooth,
+#waybar.main #network.wifi,
+#waybar.main #network.info {
+  color: @performance;
+  background: @background1;
+}
+
+#cava { font-size: 12px; }
+
+#cava,
+#waybar.main #custom-headsetbattery,
+#waybar.main #custom-spotifyicon,
+#waybar.main #pulseaudio {
+  color: @audio;
+  background: @background2;
+}
+
+#waybar.main #custom-battery,
+#waybar.main #language,
+#waybar.main #backlight,
+#waybar.main #battery {
+  color: @misc;
+  background: @background1;
+}
+
+#waybar.main #custom-weather,
+#waybar.main #clock,
+#custom-timer {
+  color: @date;
+  background: @background2;
+}
+
+#waybar.main #clock {
+  border-radius: 0pt 6pt 6pt 0pt;
+}
+/* }}} */
+
+
+/* =========================================================
+ * RIGHT SIDE — STATES / FIXES
+ * ========================================================= */
+/* {{{ */
+#waybar.main #bluetooth.disabled { opacity: 0.55; }
+#waybar.main #bluetooth.connected { opacity: 1; }
+
+#waybar.main #network.wifi {
+  margin-left: 0px;
+  margin-right: 0px;
+}
+
+#waybar.main #pulseaudio.output.muted,
+#waybar.main #pulseaudio.input.muted {
+  color: @mute_pink2;
+}
+
+#custom-swap.hidden,
+#waybar.main #custom-swap.hidden {
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  color: transparent;
+  background: transparent;
+  font-size: 0;
+}
+/* }}} */
+
+
+/* =========================================================
+ * TOOLTIPS / MENUS
+ * ========================================================= */
+/* {{{ */
+tooltip {
+  background: @background;
+  border: 3px solid @caution;
+  border-radius: 8px;
+  font-weight: 500;
+  font-family: "JetBrains Mono Nerd Font";
+}
+
+#waybar.main #tray menu {
+  background: @background;
+  border: 3px solid @caution;
+  border-radius: 8px;
+}
+/* }}} */
+
+
+/* =========================================================
+ * INDICATOR BAR
+ * ========================================================= */
+/* {{{ */
+#waybar.indicator {
+  font-size: 10px;
+  color: rgba(0, 0, 0, 0);
+  background: rgba(0, 0, 0, 0);
+}
+
+#waybar.indicator #custom-batteryindicator {
+  border: 2.5px solid @sepepator;
+  background: transparent;
+  border-radius: 7px;
+  padding-left: 2502px;
+}
+
+#waybar.indicator #custom-batteryindicator.critical {
+  animation: blink-critical-battery 1s steps(15) infinite alternate;
+}
+#waybar.indicator #custom-batteryindicator.warning {
+  animation: blink-warning-battery 0.2s steps(15) 4 alternate;
+}
+#waybar.indicator #custom-batteryindicator.discharging {
+  animation: blink-discharging-battery 0.3s steps(15) 2 alternate;
+}
+#waybar.indicator #custom-batteryindicator.charging {
+  animation: blink-charging-battery 0.3s steps(15) 2 alternate;
+}
+#waybar.indicator #custom-batteryindicator.full {
+  animation: blink-full-battery 0.2s steps(15) 4 alternate;
+}
+
+#waybar.indicator,
+#waybar.indicator * {
+}
+/* }}} */

@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+kitty @ launch --type=window --title "KB – Live Performance (Visual)" gtop

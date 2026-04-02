@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# give the session time to come up
+sleep 3
+pkill -f kdeconnectd >/dev/null 2>&1 || true
+exec kdeconnectd
