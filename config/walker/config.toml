@@ -1,0 +1,10 @@
+theme = "noah"
+
+hide_quick_activation = true
+hide_action_hints = false
+hide_return_action = false
+
+[providers]
+default = ["desktopapplications", "files", "calc", "runner", "menus", "websearch"]
+empty = ["desktopapplications"]
+max_results = 60

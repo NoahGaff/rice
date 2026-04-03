@@ -1,0 +1,174 @@
+@define-color window_bg_color rgba(33, 24, 48, 0.76);
+@define-color panel_bg_color rgba(44, 32, 64, 0.58);
+@define-color accent_bg_color #89b4fa;
+@define-color theme_fg_color #f5c2e7;
+@define-color selected_fg_color #a6e3a1;
+@define-color hint_fg_color #89dceb;
+@define-color hint_muted_color #b4d7ff;
+@define-color error_bg_color #f38ba8;
+@define-color error_fg_color #11111b;
+
+* {
+  all: unset;
+  font-family: "OpenDyslexicM Nerd Font", "OpenDyslexic Nerd Font", "OpenDyslexic", sans-serif;
+}
+
+window,
+.window {
+  background: transparent;
+}
+
+.normal-icons {
+  -gtk-icon-size: 14px;
+}
+
+.large-icons {
+  -gtk-icon-size: 24px;
+}
+
+scrollbar {
+  opacity: 0;
+}
+
+/* main shell */
+#BoxWrapper,
+.box-wrapper {
+  background-color: @window_bg_color;
+  border: 1px solid alpha(@accent_bg_color, 0.24);
+  border-radius: 20px;
+  padding: 12px;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.32);
+}
+
+/* search */
+#SearchContainer,
+.search-container {
+  background-color: @panel_bg_color;
+  border: 1px solid alpha(@accent_bg_color, 0.18);
+  border-radius: 16px;
+  padding: 1px;
+}
+
+#Input,
+.input {
+  background-color: transparent;
+  color: @theme_fg_color;
+  caret-color: @theme_fg_color;
+  border-radius: 15px;
+  padding: 8px 12px;
+}
+
+.input placeholder {
+  opacity: 0.62;
+}
+
+.input selection {
+  background-color: alpha(@accent_bg_color, 0.20);
+  color: @theme_fg_color;
+}
+
+/* results */
+#List,
+.list {
+  color: @theme_fg_color;
+}
+
+.item-box {
+  border-radius: 12px;
+  padding: 6px 8px;
+}
+
+child:selected .item-box,
+row:selected .item-box {
+  background-color: alpha(@accent_bg_color, 0.17);
+  border: 1px solid alpha(@accent_bg_color, 0.24);
+}
+
+.item-text,
+.item-label,
+.placeholder,
+.elephant-hint,
+.input {
+  color: @theme_fg_color;
+}
+
+.item-subtext,
+.providerlist .item-subtext {
+  font-size: 11px;
+  color: alpha(@theme_fg_color, 0.72);
+}
+
+child:selected .item-text,
+row:selected .item-text,
+child:selected .item-label,
+row:selected .item-label {
+  color: @selected_fg_color;
+}
+
+child:selected .item-subtext,
+row:selected .item-subtext {
+  color: alpha(@selected_fg_color, 0.82);
+}
+
+.item-quick-activation {
+  background-color: alpha(@accent_bg_color, 0.18);
+  border-radius: 7px;
+  padding: 3px 7px;
+}
+
+/* hints / keybinds */
+#Keybinds,
+.keybinds {
+  background-color: alpha(@panel_bg_color, 0.92);
+  border: 1px solid alpha(@accent_bg_color, 0.16);
+  border-radius: 12px;
+  padding: 8px;
+  font-size: 13px;
+  color: @hint_fg_color;
+}
+
+#RightRail,
+.right-rail {
+  min-width: 145px;
+}
+
+.global-keybinds,
+.item-keybinds,
+.keybinds {
+  color: @hint_fg_color;
+}
+
+.keybind-button,
+.keybind-label {
+  color: @hint_fg_color;
+  font-size: 13px;
+  opacity: 0.96;
+}
+
+.keybind-bind {
+  color: @hint_muted_color;
+  font-size: 13px;
+  opacity: 0.96;
+}
+
+.keybind-label {
+  padding: 3px 6px;
+  border-radius: 6px;
+  border: 1px solid alpha(@accent_bg_color, 0.26);
+}
+
+/* preview if you ever re-enable it */
+.preview {
+  background-color: alpha(@panel_bg_color, 0.90);
+  border: 1px solid alpha(@accent_bg_color, 0.14);
+  border-radius: 12px;
+  padding: 8px;
+}
+
+/* errors */
+.error {
+  padding: 8px;
+  background-color: @error_bg_color;
+  color: @error_fg_color;
+  border-radius: 8px;
+}
