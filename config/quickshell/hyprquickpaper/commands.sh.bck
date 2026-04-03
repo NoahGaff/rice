@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+exec >>/tmp/hyprquickpaper.log 2>&1
+
+echo "-----"
+date
+echo "arg1=$1"
+echo "TARGET_MONITOR=$TARGET_MONITOR"
+
+wall="$1"
+monitor="$TARGET_MONITOR"
+
+if [ -z "$wall" ]; then
+  echo "no wallpaper arg"
+  exit 1
+fi
+
+if [ ! -e "$wall" ]; then
+  echo "wallpaper does not exist"
+  exit 1
+fi
+
+if [ -z "$monitor" ]; then
+  echo "no TARGET_MONITOR provided"
+  exit 1
+fi
+
+case "${wall,,}" in
+*.mp4 | *.webm | *.mkv | *.mov | *.avi)
+  pkill -f "mpvpaper.*$monitor" || true
+  mpvpaper -o "no-audio --loop-file=inf --hwdec=auto-safe --profile=fast --interpolation=no --vd-lavc-threads=2" "$monitor" "$wall" &
+  ;;
+*.jpg | *.jpeg | *.png | *.webp | *.bmp | *.gif)
+  pkill -f "mpvpaper.*$monitor" || true
+  swww img -o "$monitor" "$wall"
+  ;;
+*)
+  echo "unsupported file type"
+  exit 1
+  ;;
+esac

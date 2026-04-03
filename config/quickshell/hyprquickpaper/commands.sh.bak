@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+exec >>/tmp/hyprquickpaper.log 2>&1
+
+echo "-----"
+date
+echo "arg1=$1"
+echo "TARGET_MONITOR=$TARGET_MONITOR"
+
+wall="$1"
+monitor="$TARGET_MONITOR"
+state_dir="$HOME/.local/state/hypr/static-walls"
+
+if [ -z "$wall" ]; then
+  echo "no wallpaper arg"
+  exit 1
+fi
+
+if [ ! -e "$wall" ]; then
+  echo "wallpaper does not exist"
+  exit 1
+fi
+
+if [ -z "$monitor" ]; then
+  echo "no TARGET_MONITOR provided"
+  exit 1
+fi
+
+mkdir -p "$state_dir"
+
+case "$monitor" in
+DP-1) slot="left" ;;
+DP-3) slot="middle" ;;
+DP-2) slot="right" ;;
+*)
+  echo "unsupported monitor: $monitor"
+  exit 1
+  ;;
+esac
+
+case "${wall,,}" in
+*.mp4 | *.webm | *.mkv | *.mov | *.avi)
+  pkill -f "mpvpaper.*$monitor" || true
+  mpvpaper -o "no-audio --loop-file=inf --hwdec=auto-safe --profile=fast --interpolation=no --vd-lavc-threads=2" "$monitor" "$wall" &
+  ;;
+*.jpg | *.jpeg | *.png | *.webp | *.bmp | *.gif)
+  pkill -f "mpvpaper.*$monitor" || true
+
+  if ! pgrep -x awww-daemon >/dev/null; then
+    awww-daemon --no-cache >/dev/null 2>&1 &
+    disown
+    sleep 1
+  fi
+
+  printf '%s\n' "$wall" >"$state_dir/$slot.txt"
+  awww img "$wall" --outputs "$monitor" --transition-type none
+  ;;
+*)
+  echo "unsupported file type"
+  exit 1
+  ;;
+esac
