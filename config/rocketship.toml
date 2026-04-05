@@ -1,0 +1,157 @@
+"$schema" = "https://starship.rs/config-schema.json"
+
+format = """
+[](fg:#cba6f7)\
+$username\
+[](fg:#cba6f7 bg:#b4befe)\
+$hostname\
+[](fg:#b4befe bg:#a6e3a1)\
+$directory\
+[](fg:#a6e3a1 bg:#f5c2e7)\
+$shell\
+[](fg:#f5c2e7 bg:#89dceb)\
+$git_branch\
+$git_status\
+[](fg:#89dceb bg:#89b4fa)\
+$c\
+$cpp\
+$elixir\
+$elm\
+$golang\
+$gradle\
+$haskell\
+$java\
+$julia\
+$nodejs\
+$nim\
+$rust\
+$scala\
+[](fg:#89b4fa bg:#313244)\
+$docker_context\
+[](fg:#313244 bg:#45475a)\
+$time\
+[ ](fg:#45475a)\
+"""
+
+[username]
+show_always = true
+style_user = "fg:#11111b bg:#cba6f7"
+style_root = "fg:#11111b bg:#cba6f7"
+format = "[ $user ]($style)"
+disabled = false
+
+[hostname]
+ssh_only = true
+trim_at = "."
+style = "fg:#11111b bg:#b4befe"
+format = "[ 󰒋 $hostname ]($style)"
+disabled = false
+
+[directory]
+style = "fg:#11111b bg:#a6e3a1"
+format = "[ $path ]($style)"
+truncation_length = 3
+truncation_symbol = "…/"
+
+[directory.substitutions]
+"Documents" = "󰈙 "
+"Downloads" = " "
+"Music" = " "
+"Pictures" = " "
+".config" = " "
+".local" = "󰘓 "
+
+[shell]
+disabled = false
+style = "fg:#11111b bg:#f5c2e7"
+format = "[ $indicator ]($style)"
+bash_indicator = "bash"
+fish_indicator = "fish"
+zsh_indicator = "zsh"
+powershell_indicator = "pwsh"
+unknown_indicator = "shell"
+
+[c]
+symbol = " "
+style = "bg:#86BBD8"
+format = "[ $symbol ($version) ]($style)"
+
+[cpp]
+symbol = " "
+style = "bg:#86BBD8"
+format = "[ $symbol ($version) ]($style)"
+
+[docker_context]
+symbol = " "
+style = "fg:#cdd6f4 bg:#313244"
+format = "[ $symbol $context ]($style)"
+
+[elixir]
+symbol = " "
+style = "bg:#86BBD8"
+format = "[ $symbol ($version) ]($style)"
+
+[elm]
+symbol = " "
+style = "bg:#86BBD8"
+format = "[ $symbol ($version) ]($style)"
+
+[git_branch]
+symbol = ""
+style = "fg:#11111b bg:#89dceb"
+format = "[ $symbol $branch ]($style)"
+
+[git_status]
+style = "fg:#11111b bg:#89dceb"
+format = "[$all_status$ahead_behind ]($style)"
+
+[golang]
+symbol = " "
+style = "bg:#86BBD8"
+format = "[ $symbol ($version) ]($style)"
+
+[gradle]
+symbol = " "
+style = "bg:#86BBD8"
+format = "[ $symbol ($version) ]($style)"
+
+[haskell]
+symbol = " "
+style = "bg:#86BBD8"
+format = "[ $symbol ($version) ]($style)"
+
+[java]
+symbol = " "
+style = "bg:#86BBD8"
+format = "[ $symbol ($version) ]($style)"
+
+[julia]
+symbol = " "
+style = "bg:#86BBD8"
+format = "[ $symbol ($version) ]($style)"
+
+[nodejs]
+symbol = ""
+style = "fg:#11111b bg:#89b4fa"
+format = "[ $symbol ($version) ]($style)"
+
+[nim]
+symbol = "󰆥 "
+style = "bg:#86BBD8"
+format = "[ $symbol ($version) ]($style)"
+
+[rust]
+symbol = ""
+style = "fg:#11111b bg:#89b4fa"
+format = "[ $symbol ($version) ]($style)"
+
+[scala]
+symbol = " "
+style = "fg:#11111b bg:#89b4fa"
+format = "[ $symbol ($version) ]($style)"
+
+[time]
+disabled = false
+time_format = "%R"
+style = "fg:#cdd6f4 bg:#45475a"
+format = "[ $time ]($style)"
